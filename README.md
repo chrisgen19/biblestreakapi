@@ -1,14 +1,16 @@
 # Bible Streak API
 
-A RESTful API built with Express.js, PostgreSQL, and Passport.js for user authentication and management.
+A RESTful API built with Express.js, PostgreSQL, Prisma ORM, and Passport.js for user authentication and management.
 
 ## Features
 
 - User registration and authentication
 - JWT-based authorization
 - Password hashing with bcryptjs
-- Input validation
+- Input validation with express-validator
 - CORS enabled for frontend integration
+- **Prisma ORM** for type-safe database access
+- Automated database migrations
 - PostgreSQL database
 - Secure API endpoints
 
@@ -17,6 +19,7 @@ A RESTful API built with Express.js, PostgreSQL, and Passport.js for user authen
 - **Node.js** - Runtime environment
 - **Express.js** - Web framework
 - **PostgreSQL** - Database
+- **Prisma** - Modern ORM with type safety
 - **Passport.js** - Authentication middleware
 - **JWT** - JSON Web Tokens for authorization
 - **bcryptjs** - Password hashing
@@ -27,19 +30,22 @@ A RESTful API built with Express.js, PostgreSQL, and Passport.js for user authen
 ```
 biblestreakapi/
 ├── config/
-│   ├── database.js          # PostgreSQL connection pool
-│   ├── initDb.js            # Database initialization script
-│   └── passport.js          # Passport JWT strategy configuration
+│   ├── prisma.js             # Prisma client instance
+│   └── passport.js           # Passport JWT strategy configuration
 ├── middleware/
-│   └── auth.js              # Authentication middleware
+│   └── auth.js               # Authentication middleware
+├── prisma/
+│   ├── schema.prisma         # Prisma schema definition
+│   └── migrations/           # Database migrations
 ├── routes/
-│   ├── auth.js              # Register & Login endpoints
-│   └── users.js             # User CRUD endpoints
-├── .env                     # Environment variables
-├── .gitignore               # Git ignore file
-├── index.js                 # Main application entry point
-├── package.json             # Dependencies and scripts
-└── README.md                # Documentation
+│   ├── auth.js               # Register & Login endpoints
+│   └── users.js              # User CRUD endpoints
+├── .env                      # Environment variables
+├── .gitignore                # Git ignore file
+├── index.js                  # Main application entry point
+├── package.json              # Dependencies and scripts
+├── prisma.config.ts          # Prisma configuration
+└── README.md                 # Documentation
 ```
 
 ## Prerequisites
@@ -80,10 +86,12 @@ biblestreakapi/
    GRANT ALL PRIVILEGES ON DATABASE biblestreak TO myuser;
    ```
 
-5. **Initialize the database tables**:
+5. **Run Prisma migrations**:
    ```bash
-   npm run init-db
+   npm run prisma:migrate
    ```
+
+   This will create all necessary tables in your database.
 
 ## Running the Application
 
@@ -98,6 +106,13 @@ npm run dev
 ```
 
 The API will be available at `http://localhost:5000`
+
+## Prisma Commands
+
+- **Run migrations**: `npm run prisma:migrate`
+- **Generate Prisma Client**: `npm run prisma:generate`
+- **Open Prisma Studio** (Database GUI): `npm run prisma:studio`
+- **Reset database**: `npm run prisma:reset`
 
 ## API Endpoints
 
@@ -116,9 +131,17 @@ Content-Type: application/json
 {
   "email": "user@example.com",
   "password": "password123",
-  "name": "John Doe"
+  "firstName": "John",
+  "lastName": "Doe",
+  "address": "123 Main St",
+  "country": "USA",
+  "gender": "male",
+  "birthday": "1990-01-15"
 }
 ```
+
+**Required fields**: `email`, `password`, `firstName`, `lastName`
+**Optional fields**: `address`, `country`, `gender`, `birthday`
 
 **Response (201 Created):**
 ```json
@@ -127,8 +150,13 @@ Content-Type: application/json
   "user": {
     "id": 1,
     "email": "user@example.com",
-    "name": "John Doe",
-    "created_at": "2025-11-11T10:30:00.000Z"
+    "firstName": "John",
+    "lastName": "Doe",
+    "address": "123 Main St",
+    "country": "USA",
+    "gender": "male",
+    "birthday": "1990-01-15T00:00:00.000Z",
+    "createdAt": "2025-11-11T10:30:00.000Z"
   },
   "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
 }
@@ -152,7 +180,12 @@ Content-Type: application/json
   "user": {
     "id": 1,
     "email": "user@example.com",
-    "name": "John Doe"
+    "firstName": "John",
+    "lastName": "Doe",
+    "address": "123 Main St",
+    "country": "USA",
+    "gender": "male",
+    "birthday": "1990-01-15T00:00:00.000Z"
   },
   "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
 }
@@ -180,16 +213,14 @@ Authorization: Bearer <token>
     {
       "id": 1,
       "email": "user@example.com",
-      "name": "John Doe",
-      "created_at": "2025-11-11T10:30:00.000Z",
-      "updated_at": "2025-11-11T10:30:00.000Z"
-    },
-    {
-      "id": 2,
-      "email": "jane@example.com",
-      "name": "Jane Smith",
-      "created_at": "2025-11-11T11:00:00.000Z",
-      "updated_at": "2025-11-11T11:00:00.000Z"
+      "firstName": "John",
+      "lastName": "Doe",
+      "address": "123 Main St",
+      "country": "USA",
+      "gender": "male",
+      "birthday": "1990-01-15T00:00:00.000Z",
+      "createdAt": "2025-11-11T10:30:00.000Z",
+      "updatedAt": "2025-11-11T10:30:00.000Z"
     }
   ]
 }
@@ -208,9 +239,14 @@ Authorization: Bearer <token>
   "user": {
     "id": 1,
     "email": "user@example.com",
-    "name": "John Doe",
-    "created_at": "2025-11-11T10:30:00.000Z",
-    "updated_at": "2025-11-11T10:30:00.000Z"
+    "firstName": "John",
+    "lastName": "Doe",
+    "address": "123 Main St",
+    "country": "USA",
+    "gender": "male",
+    "birthday": "1990-01-15T00:00:00.000Z",
+    "createdAt": "2025-11-11T10:30:00.000Z",
+    "updatedAt": "2025-11-11T10:30:00.000Z"
   }
 }
 ```
@@ -222,9 +258,14 @@ Authorization: Bearer <token>
 Content-Type: application/json
 
 {
-  "name": "John Updated",
+  "firstName": "John",
+  "lastName": "Updated",
   "email": "newemail@example.com",
-  "password": "newpassword123"
+  "password": "newpassword123",
+  "address": "456 New St",
+  "country": "Canada",
+  "gender": "male",
+  "birthday": "1990-01-15"
 }
 ```
 
@@ -237,8 +278,13 @@ Content-Type: application/json
   "user": {
     "id": 1,
     "email": "newemail@example.com",
-    "name": "John Updated",
-    "updated_at": "2025-11-11T12:00:00.000Z"
+    "firstName": "John",
+    "lastName": "Updated",
+    "address": "456 New St",
+    "country": "Canada",
+    "gender": "male",
+    "birthday": "1990-01-15T00:00:00.000Z",
+    "updatedAt": "2025-11-11T12:00:00.000Z"
   }
 }
 ```
@@ -264,17 +310,41 @@ Authorization: Bearer <token>
 
 ## Database Schema
 
-### Users Table
-```sql
-CREATE TABLE users (
-  id SERIAL PRIMARY KEY,
-  email VARCHAR(255) UNIQUE NOT NULL,
-  password VARCHAR(255) NOT NULL,
-  name VARCHAR(255) NOT NULL,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
+### User Model (Prisma Schema)
+
+```prisma
+model User {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  password  String
+  firstName String   @map("first_name")
+  lastName  String   @map("last_name")
+  address   String?
+  country   String?
+  gender    String?
+  birthday  DateTime?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("users")
+}
 ```
+
+### Database Table
+
+| Column | Type | Nullable | Default | Description |
+|--------|------|----------|---------|-------------|
+| id | SERIAL | No | Auto-increment | Primary key |
+| email | VARCHAR | No | - | Unique email address |
+| password | VARCHAR | No | - | Hashed password |
+| first_name | VARCHAR | No | - | User's first name |
+| last_name | VARCHAR | No | - | User's last name |
+| address | VARCHAR | Yes | NULL | User's address |
+| country | VARCHAR | Yes | NULL | User's country |
+| gender | VARCHAR | Yes | NULL | User's gender (male/female/other) |
+| birthday | TIMESTAMP | Yes | NULL | User's birthday |
+| created_at | TIMESTAMP | No | CURRENT_TIMESTAMP | Record creation time |
+| updated_at | TIMESTAMP | No | CURRENT_TIMESTAMP | Last update time |
 
 ## Error Responses
 
@@ -325,7 +395,8 @@ CREATE TABLE users (
 - **Password Hashing**: Passwords are hashed using bcryptjs with salt rounds
 - **JWT Authentication**: Tokens expire after 7 days
 - **Input Validation**: All inputs are validated using express-validator
-- **SQL Injection Protection**: Parameterized queries prevent SQL injection
+- **SQL Injection Protection**: Prisma ORM prevents SQL injection
+- **Type Safety**: Prisma provides compile-time type checking
 - **CORS**: Cross-Origin Resource Sharing enabled for frontend integration
 - **Environment Variables**: Sensitive data stored in .env file
 
@@ -335,7 +406,16 @@ CREATE TABLE users (
 ```bash
 curl -X POST http://localhost:5000/api/auth/register \
   -H "Content-Type: application/json" \
-  -d '{"email":"test@example.com","password":"password123","name":"Test User"}'
+  -d '{
+    "email":"test@example.com",
+    "password":"password123",
+    "firstName":"Test",
+    "lastName":"User",
+    "address":"123 Test St",
+    "country":"USA",
+    "gender":"male",
+    "birthday":"1990-01-15"
+  }'
 ```
 
 ### Login
@@ -356,7 +436,7 @@ curl -X GET http://localhost:5000/api/users \
 curl -X PUT http://localhost:5000/api/users/1 \
   -H "Authorization: Bearer TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"name":"Updated Name"}'
+  -d '{"firstName":"Updated","lastName":"Name"}'
 ```
 
 ### Delete user
@@ -372,6 +452,20 @@ curl -X DELETE http://localhost:5000/api/users/1 \
    - Key: `Authorization`
    - Value: `Bearer <your-token>`
 3. Set Content-Type to `application/json` for POST/PUT requests
+
+## Using Prisma Studio
+
+Prisma Studio is a visual database browser that comes with Prisma. To use it:
+
+```bash
+npm run prisma:studio
+```
+
+This will open a browser window where you can:
+- View all your data
+- Create, update, and delete records
+- Filter and search data
+- See relationships between models
 
 ## Connecting to Next.js Frontend
 
@@ -427,7 +521,10 @@ export const userAPI = {
 
 - `npm start` - Start the production server
 - `npm run dev` - Start development server with nodemon
-- `npm run init-db` - Initialize database tables
+- `npm run prisma:migrate` - Run database migrations
+- `npm run prisma:generate` - Generate Prisma Client
+- `npm run prisma:studio` - Open Prisma Studio (database GUI)
+- `npm run prisma:reset` - Reset database and run all migrations
 - `npm test` - Run tests (not implemented yet)
 
 ## Environment Variables
@@ -444,9 +541,9 @@ export const userAPI = {
    - Use a strong, random `JWT_SECRET`
    - Update `DATABASE_URL` with production database credentials
 
-2. **Set up production database**:
+2. **Run Prisma migrations**:
    ```bash
-   npm run init-db
+   npm run prisma:migrate
    ```
 
 3. **Use a process manager** (e.g., PM2):
@@ -458,6 +555,16 @@ export const userAPI = {
 4. **Enable HTTPS** using a reverse proxy (nginx, Apache, or cloud provider)
 
 5. **Set up environment-specific CORS** in production
+
+## Prisma Benefits
+
+- ✅ **Type Safety**: Auto-generated TypeScript types
+- ✅ **Auto-completion**: Full IDE support
+- ✅ **Migration System**: Version-controlled database changes
+- ✅ **Prisma Studio**: Built-in database GUI
+- ✅ **Query Optimization**: Efficient SQL generation
+- ✅ **Readable Queries**: Clean, intuitive syntax
+- ✅ **No SQL Injection**: Parameterized queries by default
 
 ## Future Enhancements
 
@@ -479,6 +586,14 @@ export const userAPI = {
 - Ensure PostgreSQL is running
 - Verify database credentials in `.env`
 - Check if the database exists
+
+### Prisma Client not found
+- Run `npm run prisma:generate` to generate the client
+
+### Migration failed
+- Check database connection
+- Ensure database user has proper permissions
+- Review migration files in `prisma/migrations/`
 
 ### JWT token invalid
 - Token may have expired (7-day expiration)

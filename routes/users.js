@@ -1,7 +1,7 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const { body, validationResult } = require('express-validator');
-const pool = require('../config/database');
+const prisma = require('../config/prisma');
 const authenticate = require('../middleware/auth');
 
 const router = express.Router();
@@ -10,20 +10,39 @@ const router = express.Router();
 const updateValidation = [
   body('email').optional().isEmail().normalizeEmail().withMessage('Valid email is required'),
   body('password').optional().isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
-  body('name').optional().trim().notEmpty().withMessage('Name cannot be empty'),
+  body('firstName').optional().trim().notEmpty().withMessage('First name cannot be empty'),
+  body('lastName').optional().trim().notEmpty().withMessage('Last name cannot be empty'),
+  body('address').optional().trim(),
+  body('country').optional().trim(),
+  body('gender').optional().isIn(['male', 'female', 'other']).withMessage('Gender must be male, female, or other'),
+  body('birthday').optional().isISO8601().toDate().withMessage('Birthday must be a valid date'),
 ];
 
 // GET /api/users - Get all users (protected)
 router.get('/', authenticate, async (req, res) => {
   try {
-    const result = await pool.query(
-      'SELECT id, email, name, created_at, updated_at FROM users ORDER BY created_at DESC'
-    );
+    const users = await prisma.user.findMany({
+      select: {
+        id: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+        address: true,
+        country: true,
+        gender: true,
+        birthday: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+    });
 
     res.json({
       message: 'Users retrieved successfully',
-      count: result.rows.length,
-      users: result.rows,
+      count: users.length,
+      users,
     });
   } catch (error) {
     console.error('Get users error:', error);
@@ -36,18 +55,29 @@ router.get('/:id', authenticate, async (req, res) => {
   try {
     const { id } = req.params;
 
-    const result = await pool.query(
-      'SELECT id, email, name, created_at, updated_at FROM users WHERE id = $1',
-      [id]
-    );
+    const user = await prisma.user.findUnique({
+      where: { id: parseInt(id) },
+      select: {
+        id: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+        address: true,
+        country: true,
+        gender: true,
+        birthday: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
 
-    if (result.rows.length === 0) {
+    if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
 
     res.json({
       message: 'User retrieved successfully',
-      user: result.rows[0],
+      user,
     });
   } catch (error) {
     console.error('Get user error:', error);
@@ -65,7 +95,7 @@ router.put('/:id', authenticate, updateValidation, async (req, res) => {
     }
 
     const { id } = req.params;
-    const { email, password, name } = req.body;
+    const { email, password, firstName, lastName, address, country, gender, birthday } = req.body;
 
     // Check if user is updating their own profile or is admin
     // For now, users can only update their own profile
@@ -74,69 +104,69 @@ router.put('/:id', authenticate, updateValidation, async (req, res) => {
     }
 
     // Check if user exists
-    const userCheck = await pool.query('SELECT id FROM users WHERE id = $1', [id]);
+    const userExists = await prisma.user.findUnique({
+      where: { id: parseInt(id) },
+    });
 
-    if (userCheck.rows.length === 0) {
+    if (!userExists) {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    // Build dynamic update query
-    const updates = [];
-    const values = [];
-    let paramCount = 1;
+    // Build update data object
+    const updateData = {};
 
     if (email) {
       // Check if email is already taken by another user
-      const emailCheck = await pool.query(
-        'SELECT id FROM users WHERE email = $1 AND id != $2',
-        [email, id]
-      );
+      const emailCheck = await prisma.user.findFirst({
+        where: {
+          email,
+          NOT: { id: parseInt(id) },
+        },
+      });
 
-      if (emailCheck.rows.length > 0) {
+      if (emailCheck) {
         return res.status(400).json({ error: 'Email already in use' });
       }
 
-      updates.push(`email = $${paramCount}`);
-      values.push(email);
-      paramCount++;
+      updateData.email = email;
     }
 
     if (password) {
       const salt = await bcrypt.genSalt(10);
-      const hashedPassword = await bcrypt.hash(password, salt);
-      updates.push(`password = $${paramCount}`);
-      values.push(hashedPassword);
-      paramCount++;
+      updateData.password = await bcrypt.hash(password, salt);
     }
 
-    if (name) {
-      updates.push(`name = $${paramCount}`);
-      values.push(name);
-      paramCount++;
-    }
+    if (firstName !== undefined) updateData.firstName = firstName;
+    if (lastName !== undefined) updateData.lastName = lastName;
+    if (address !== undefined) updateData.address = address;
+    if (country !== undefined) updateData.country = country;
+    if (gender !== undefined) updateData.gender = gender;
+    if (birthday !== undefined) updateData.birthday = birthday;
 
-    // Add updated_at timestamp
-    updates.push(`updated_at = CURRENT_TIMESTAMP`);
-
-    if (updates.length === 1) {
+    if (Object.keys(updateData).length === 0) {
       return res.status(400).json({ error: 'No fields to update' });
     }
 
-    // Add user ID to values array
-    values.push(id);
-
-    const query = `
-      UPDATE users
-      SET ${updates.join(', ')}
-      WHERE id = $${paramCount}
-      RETURNING id, email, name, updated_at
-    `;
-
-    const result = await pool.query(query, values);
+    // Update user
+    const user = await prisma.user.update({
+      where: { id: parseInt(id) },
+      data: updateData,
+      select: {
+        id: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+        address: true,
+        country: true,
+        gender: true,
+        birthday: true,
+        updatedAt: true,
+      },
+    });
 
     res.json({
       message: 'User updated successfully',
-      user: result.rows[0],
+      user,
     });
   } catch (error) {
     console.error('Update user error:', error);
@@ -156,20 +186,25 @@ router.delete('/:id', authenticate, async (req, res) => {
     }
 
     // Check if user exists
-    const userCheck = await pool.query('SELECT id, email FROM users WHERE id = $1', [id]);
+    const user = await prisma.user.findUnique({
+      where: { id: parseInt(id) },
+      select: { id: true, email: true },
+    });
 
-    if (userCheck.rows.length === 0) {
+    if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
 
     // Delete user
-    await pool.query('DELETE FROM users WHERE id = $1', [id]);
+    await prisma.user.delete({
+      where: { id: parseInt(id) },
+    });
 
     res.json({
       message: 'User deleted successfully',
       deletedUser: {
-        id: userCheck.rows[0].id,
-        email: userCheck.rows[0].email,
+        id: user.id,
+        email: user.email,
       },
     });
   } catch (error) {

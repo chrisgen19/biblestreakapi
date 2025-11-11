@@ -1,5 +1,5 @@
 const { Strategy: JwtStrategy, ExtractJwt } = require('passport-jwt');
-const pool = require('./database');
+const prisma = require('./prisma');
 require('dotenv').config();
 
 const options = {
@@ -9,10 +9,18 @@ const options = {
 
 const jwtStrategy = new JwtStrategy(options, async (payload, done) => {
   try {
-    const result = await pool.query('SELECT id, email, name FROM users WHERE id = $1', [payload.id]);
+    const user = await prisma.user.findUnique({
+      where: { id: payload.id },
+      select: {
+        id: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+      },
+    });
 
-    if (result.rows.length > 0) {
-      return done(null, result.rows[0]);
+    if (user) {
+      return done(null, user);
     } else {
       return done(null, false);
     }

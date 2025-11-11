@@ -2,7 +2,7 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { body, validationResult } = require('express-validator');
-const pool = require('../config/database');
+const prisma = require('../config/prisma');
 
 const router = express.Router();
 
@@ -10,7 +10,12 @@ const router = express.Router();
 const registerValidation = [
   body('email').isEmail().normalizeEmail().withMessage('Valid email is required'),
   body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
-  body('name').trim().notEmpty().withMessage('Name is required'),
+  body('firstName').trim().notEmpty().withMessage('First name is required'),
+  body('lastName').trim().notEmpty().withMessage('Last name is required'),
+  body('address').optional().trim(),
+  body('country').optional().trim(),
+  body('gender').optional().isIn(['male', 'female', 'other']).withMessage('Gender must be male, female, or other'),
+  body('birthday').optional().isISO8601().toDate().withMessage('Birthday must be a valid date'),
 ];
 
 const loginValidation = [
@@ -27,12 +32,14 @@ router.post('/register', registerValidation, async (req, res) => {
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { email, password, name } = req.body;
+    const { email, password, firstName, lastName, address, country, gender, birthday } = req.body;
 
     // Check if user already exists
-    const userExists = await pool.query('SELECT id FROM users WHERE email = $1', [email]);
+    const userExists = await prisma.user.findUnique({
+      where: { email },
+    });
 
-    if (userExists.rows.length > 0) {
+    if (userExists) {
       return res.status(400).json({ error: 'User already exists with this email' });
     }
 
@@ -40,13 +47,30 @@ router.post('/register', registerValidation, async (req, res) => {
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
-    // Insert user
-    const result = await pool.query(
-      'INSERT INTO users (email, password, name) VALUES ($1, $2, $3) RETURNING id, email, name, created_at',
-      [email, hashedPassword, name]
-    );
-
-    const user = result.rows[0];
+    // Create user
+    const user = await prisma.user.create({
+      data: {
+        email,
+        password: hashedPassword,
+        firstName,
+        lastName,
+        address: address || null,
+        country: country || null,
+        gender: gender || null,
+        birthday: birthday || null,
+      },
+      select: {
+        id: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+        address: true,
+        country: true,
+        gender: true,
+        birthday: true,
+        createdAt: true,
+      },
+    });
 
     // Generate JWT
     const token = jwt.sign(
@@ -57,12 +81,7 @@ router.post('/register', registerValidation, async (req, res) => {
 
     res.status(201).json({
       message: 'User registered successfully',
-      user: {
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        created_at: user.created_at,
-      },
+      user,
       token,
     });
   } catch (error) {
@@ -83,13 +102,13 @@ router.post('/login', loginValidation, async (req, res) => {
     const { email, password } = req.body;
 
     // Find user
-    const result = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
+    const user = await prisma.user.findUnique({
+      where: { email },
+    });
 
-    if (result.rows.length === 0) {
+    if (!user) {
       return res.status(401).json({ error: 'Invalid email or password' });
     }
-
-    const user = result.rows[0];
 
     // Verify password
     const isMatch = await bcrypt.compare(password, user.password);
@@ -110,7 +129,12 @@ router.post('/login', loginValidation, async (req, res) => {
       user: {
         id: user.id,
         email: user.email,
-        name: user.name,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        address: user.address,
+        country: user.country,
+        gender: user.gender,
+        birthday: user.birthday,
       },
       token,
     });
