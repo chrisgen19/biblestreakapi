@@ -4,3 +4,10 @@ node_modules/
 *.log
 
 /generated/prisma
+
+# TypeScript build output
+dist/
+*.tsbuildinfo
+
+# TypeScript cache
+*.tsbuildinfo
